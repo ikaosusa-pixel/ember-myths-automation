@@ -1,1 +1,24 @@
 
+name: Ember Myths - Automation Test
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - ".github/workflows/render.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Get project files
+        uses: actions/checkout@v4
+
+      - name: Check automation
+        run: |
+          echo "Ember Myths automation is working!"
+          echo "Next step: prepare myth video production."
+
