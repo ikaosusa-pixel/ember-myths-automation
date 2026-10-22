@@ -1,24 +1,39 @@
 
-name: Ember Myths - Automation Test
+name: Ember Myths - Generate First Video
 
 on:
   workflow_dispatch:
   push:
     paths:
+      - "video.py"
       - ".github/workflows/render.yml"
 
 permissions:
   contents: read
 
 jobs:
-  test:
+  render:
     runs-on: ubuntu-latest
+    timeout-minutes: 20
+
     steps:
       - name: Get project files
         uses: actions/checkout@v4
 
-      - name: Check automation
+      - name: Install requirements
         run: |
-          echo "Ember Myths automation is working!"
-          echo "Next step: prepare myth video production."
+          sudo apt-get update
+          sudo apt-get install -y ffmpeg espeak-ng
+          python -m pip install --upgrade pip
+          python -m pip install Pillow
 
+      - name: Generate myth video
+        run: python video.py
+
+      - name: Upload finished MP4
+        uses: actions/upload-artifact@v4
+        with:
+          name: ember-myths-first-video
+          path: output/ember_myths_first_video.mp4
+          if-no-files-found: error
+          retention-days: 7
