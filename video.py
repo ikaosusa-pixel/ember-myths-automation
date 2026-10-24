@@ -1,177 +1,172 @@
 
 import os
-import math
 import subprocess
 from PIL import Image, ImageDraw, ImageFont
 
 W, H = 720, 1280
 FPS = 24
-SCENE_SECONDS = 10
-OUT_DIR = "output"
-OUT_FILE = os.path.join(OUT_DIR, "ember_myths_first_video.mp4")
+SECONDS = 10
+OUT = "output"
+FRAMES = os.path.join(OUT, "scenes")
+VIDEO = os.path.join(OUT, "ember_myths_first_video.mp4")
 
 SCENES = [
-    ("EMBER MYTHS", "2099. Humanity had forgotten the future."),
+    ("EMBER MYTHS", "In 2099, humanity had forgotten the future."),
     ("TOMORROW NOT FOUND", "At 11:59 PM, every screen went dark."),
     ("THE LAST ARCHIVIST", "Kael found a file hidden under his own name."),
-    ("A VOICE FROM TOMORROW", "The recording was seventeen years in the future."),
+    ("A VOICE FROM TOMORROW", "The recording came from seventeen years ahead."),
     ("DO NOT REMEMBER", "If you are watching this... I failed."),
 ]
 
-os.makedirs(OUT_DIR, exist_ok=True)
+os.makedirs(FRAMES, exist_ok=True)
+os.makedirs(OUT, exist_ok=True)
 
-def get_font(size):
-    candidates = [
+def font(size):
+    for path in (
         "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
         "/usr/share/fonts/truetype/liberation2/LiberationSans-Bold.ttf",
-    ]
-    for path in candidates:
+    ):
         if os.path.exists(path):
             return ImageFont.truetype(path, size)
     return ImageFont.load_default()
 
-TITLE_FONT = get_font(43)
-BODY_FONT = get_font(27)
-SMALL_FONT = get_font(20)
+def make_scene(index, title, subtitle):
+    # Fast gradient background: no per-pixel Python loops.
+    img = Image.new("RGB", (W, H), (5, 10, 24))
+    draw = ImageDraw.Draw(img, "RGBA")
 
-def make_frame(scene_index, local_frame, total_frames):
-    t = local_frame / max(1, total_frames)
-    img = Image.new("RGB", (W, H), (5, 8, 18))
-    px = img.load()
+    # Atmospheric horizon and amber light.
+    for y in range(250, 950, 5):
+        amount = int(55 * (1 - abs(y - 600) / 500))
+        if amount > 0:
+            draw.line((0, y, W, y), fill=(190, 75, 25, amount), width=5)
 
-    # Atmospheric blue-black gradient with amber horizon.
-    for y in range(H):
-        for x in range(W):
-            horizon = max(0, 1 - abs(y - (H * 0.43)) / (H * 0.48))
-            glow = max(0, 1 - math.sqrt(
-                ((x - W * 0.52) / (W * 0.72)) ** 2 +
-                ((y - H * 0.43) / (H * 0.62)) ** 2
-            ))
-            r = int(5 + 48 * horizon * glow)
-            g = int(8 + 22 * horizon * glow)
-            b = int(18 + 28 * horizon * glow)
-            px[x, y] = (r, g, b)
+    # Stars and futuristic skyline.
+    for i in range(110):
+        x = (i * 137 + index * 29) % W
+        y = (i * 83 + 47) % 760
+        draw.ellipse((x, y, x + 2, y + 2),
+                     fill=(150, 210, 255, 150))
 
-    d = ImageDraw.Draw(img, "RGBA")
-
-    # Distant futuristic skyline.
     for i in range(18):
-        bw = 22 + (i * 13 % 45)
-        bx = (i * 47) % W
-        bh = 130 + (i * 71 % 310)
-        by = int(H * 0.68 - bh)
-        d.rectangle((bx, by, bx + bw, H * 0.72),
-                    fill=(8, 18, 35, 235))
-        for wy in range(by + 20, int(H * 0.68), 28):
-            d.rectangle((bx + 6, wy, bx + 10, wy + 7),
-                        fill=(40, 180, 220, 100))
-            if bx + bw - 12 > bx + 12:
-                d.rectangle((bx + bw - 12, wy, bx + bw - 8, wy + 7),
-                            fill=(255, 145, 55, 120))
+        x = i * 43 - 8
+        bw = 24 + (i * 17 % 28)
+        bh = 120 + (i * 71 % 280)
+        top = 850 - bh
+        draw.rectangle((x, top, x + bw, 900),
+                       fill=(8, 20, 39, 255))
+        for wy in range(top + 18, 870, 32):
+            draw.rectangle((x + 7, wy, x + 11, wy + 7),
+                           fill=(65, 175, 225, 180))
+            draw.rectangle((x + bw - 10, wy, x + bw - 6, wy + 7),
+                           fill=(255, 155, 60, 170))
 
-    # Central glowing tower.
-    cx = W // 2
-    d.polygon([(cx - 65, H * 0.68), (cx - 24, H * 0.29),
-               (cx + 20, H * 0.29), (cx + 67, H * 0.68)],
-              fill=(10, 24, 43, 245))
-    d.line((cx, H * 0.30, cx, H * 0.66),
-           fill=(255, 156, 61, 210), width=4)
+    # Tall central tower.
+    draw.polygon([(300, 850), (340, 310), (380, 850)],
+                 fill=(12, 25, 46, 255))
+    draw.line((340, 330, 340, 830),
+              fill=(255, 150, 50, 255), width=4)
 
-    # Foreground silhouette of the archivist.
-    person_x = int(W * 0.5 + math.sin(t * math.pi) * 10)
-    d.ellipse((person_x - 34, H * 0.65, person_x + 34, H * 0.72),
-              fill=(3, 5, 12, 255))
-    d.polygon([(person_x - 27, H * 0.70),
-               (person_x + 27, H * 0.70),
-               (person_x + 52, H * 0.91),
-               (person_x - 50, H * 0.91)],
-              fill=(3, 5, 12, 255))
-    d.ellipse((person_x - 18, H * 0.61, person_x + 18, H * 0.66),
-              fill=(4, 8, 15, 255))
+    # Archivist silhouette.
+    draw.ellipse((305, 785, 355, 845), fill=(2, 4, 10, 255))
+    draw.polygon([(300, 835), (360, 835), (395, 1060),
+                  (265, 1060)], fill=(2, 4, 10, 255))
+    draw.ellipse((324, 865, 336, 877),
+                 fill=(255, 140, 40, 255))
 
-    title, subtitle = SCENES[scene_index]
-    alpha = int(255 * min(1, t * 5 + 0.15, (1 - t) * 5 + 0.15))
+    # Brand and title.
+    draw.text((W // 2, 85), "EMBER MYTHS  /  2099",
+              font=font(24), fill=(255, 170, 70),
+              anchor="mm")
 
-    d.text((W // 2, 95), "EMBER MYTHS  /  2099",
-           font=SMALL_FONT, fill=(255, 170, 76, 230), anchor="mm")
+    draw.rounded_rectangle((30, 920, W - 30, 1150),
+                           radius=20, fill=(3, 7, 17, 235),
+                           outline=(255, 155, 55, 180), width=2)
 
-    # Text panel.
-    d.rounded_rectangle((35, 900, W - 35, 1125), radius=20,
-                        fill=(3, 7, 16, 218),
-                        outline=(255, 156, 61, 110), width=2)
+    draw.text((W // 2, 980), title, font=font(35),
+              fill=(255, 174, 78), anchor="mm")
 
-    d.text((W // 2, 962), title, font=TITLE_FONT,
-           fill=(255, 178, 91, alpha), anchor="mm",
-           stroke_width=1, stroke_fill=(35, 13, 4, alpha))
-
-    # Wrap subtitle into two lines if needed.
+    # Wrap subtitle into readable lines.
+    f = font(24)
     words = subtitle.split()
-    lines, current = [], ""
+    lines, line = [], ""
     for word in words:
-        test = (current + " " + word).strip()
-        if d.textbbox((0, 0), test, font=BODY_FONT)[2] > W - 100:
-            lines.append(current)
-            current = word
+        candidate = (line + " " + word).strip()
+        if draw.textbbox((0, 0), candidate, font=f)[2] > W - 90:
+            lines.append(line)
+            line = word
         else:
-            current = test
-    if current:
-        lines.append(current)
+            line = candidate
+    if line:
+        lines.append(line)
 
-    for j, line in enumerate(lines[:3]):
-        d.text((W // 2, 1030 + j * 38), line, font=BODY_FONT,
-               fill=(235, 241, 250, alpha), anchor="mm")
+    for j, text in enumerate(lines[:3]):
+        draw.text((W // 2, 1040 + j * 34), text,
+                  font=f, fill=(240, 244, 250), anchor="mm")
 
-    d.text((W // 2, 1195), "THE FUTURE HAS A MEMORY.",
-           font=SMALL_FONT, fill=(120, 180, 205, 210), anchor="mm")
+    draw.text((W // 2, 1200), "THE FUTURE HAS A MEMORY",
+              font=font(17), fill=(120, 190, 220), anchor="mm")
 
-    return img
+    img.save(os.path.join(FRAMES, f"scene_{index:02d}.jpg"),
+             quality=88)
+
+def run(args):
+    subprocess.run(args, check=True)
 
 def main():
-    frames_per_scene = FPS * SCENE_SECONDS
-    raw_video = os.path.join(OUT_DIR, "silent_video.mp4")
-    frames_dir = os.path.join(OUT_DIR, "frames")
-    os.makedirs(frames_dir, exist_ok=True)
+    for i, (title, subtitle) in enumerate(SCENES):
+        make_scene(i, title, subtitle)
 
-    # Render frames as numbered images.
-    for scene_index in range(len(SCENES)):
-        for frame_index in range(frames_per_scene):
-            frame = make_frame(scene_index, frame_index, frames_per_scene)
-            frame.save(os.path.join(
-                frames_dir,
-                f"frame_{scene_index * frames_per_scene + frame_index:05d}.jpg"
-            ), quality=90)
+    # Five still scenes, ten seconds each.
+    clips = []
+    for i in range(len(SCENES)):
+        clip = os.path.join(OUT, f"clip_{i:02d}.mp4")
+        image = os.path.join(FRAMES, f"scene_{i:02d}.jpg")
+        run([
+            "ffmpeg", "-y", "-hide_banner", "-loglevel", "error",
+            "-loop", "1", "-framerate", str(FPS),
+            "-i", image, "-t", str(SECONDS),
+            "-vf", "scale=720:1280,format=yuv420p",
+            "-r", str(FPS), "-c:v", "libx264",
+            "-preset", "ultrafast", "-crf", "25",
+            "-an", clip
+        ])
+        clips.append(clip)
 
-    subprocess.run([
+    # Join scenes.
+    concat_file = os.path.join(OUT, "clips.txt")
+    with open(concat_file, "w", encoding="utf-8") as f:
+        for clip in clips:
+            f.write(f"file '{os.path.abspath(clip)}'\n")
+
+    silent = os.path.join(OUT, "silent.mp4")
+    run([
         "ffmpeg", "-y", "-hide_banner", "-loglevel", "error",
-        "-framerate", str(FPS),
-        "-i", os.path.join(frames_dir, "frame_%05d.jpg"),
-        "-c:v", "libx264", "-pix_fmt", "yuv420p",
-        "-preset", "ultrafast", "-crf", "24",
-        raw_video
-    ], check=True)
+        "-f", "concat", "-safe", "0", "-i", concat_file,
+        "-c", "copy", silent
+    ])
 
-    # Create English narration using espeak-ng.
+    # English synthetic narration.
     narration = " ".join(subtitle for _, subtitle in SCENES)
-    narration_file = os.path.join(OUT_DIR, "narration.wav")
-    subprocess.run([
-        "espeak-ng", "-v", "en-us", "-s", "145",
-        "-w", narration_file, narration
-    ], check=True)
+    wav = os.path.join(OUT, "narration.wav")
+    run([
+        "espeak-ng", "-v", "en-us", "-s", "140",
+        "-w", wav, narration
+    ])
 
-    # Mix narration with a quiet cinematic ambient bed.
-    subprocess.run([
+    # Keep video duration at 50 seconds.
+    run([
         "ffmpeg", "-y", "-hide_banner", "-loglevel", "error",
-        "-i", raw_video, "-i", narration_file,
-        "-f", "lavfi", "-i", "anullsrc=channel_layout=stereo:sample_rate=44100",
+        "-i", silent, "-i", wav,
         "-filter_complex",
-        "[1:a]volume=1.5[narr];[2:a]volume=0.0[silence];"
-        "[narr][silence]amix=inputs=2:duration=first[a]",
+        "[1:a]apad,atrim=0:50,volume=1.4[a]",
         "-map", "0:v:0", "-map", "[a]",
-        "-c:v", "copy", "-c:a", "aac", "-b:a", "128k",
-        "-shortest", "-movflags", "+faststart", OUT_FILE
-    ], check=True)
+        "-t", "50", "-c:v", "copy",
+        "-c:a", "aac", "-b:a", "128k",
+        "-movflags", "+faststart", VIDEO
+    ])
 
-    print(f"Video created: {OUT_FILE}")
+    print("SUCCESS: " + VIDEO)
 
 if __name__ == "__main__":
     main()
